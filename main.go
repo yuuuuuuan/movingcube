@@ -8,6 +8,8 @@ import (
 	"log"
 )
 
+type dir string
+
 const (
 	screenWidth  = 600
 	screenHeight = 500
@@ -15,37 +17,73 @@ const (
 	cubeHeight   = 50
 	stoneWidth   = 100
 	stoneHeight  = 100
-	movingSpeed  = 2
+	movingSpeed  = 1
+)
+
+const (
+	keyboardnone = iota
+	keyboardup
+	keyboarddown
+	keyboardleft
+	keyboardright
 )
 
 type Input struct {
-	msg string
+	keyboardstate int
+	msg           string
 }
 
 type Cube struct {
 	width  int
 	height int
-	x      float64
-	y      float64
+	x      int
+	y      int
 	img    *ebiten.Image
 }
 
-func (i *Input) Update(cube *Cube, stone *Cube) {
-	if ebiten.IsKeyPressed(ebiten.KeyLeft) && CubeCollision(cube, stone, "left") {
-		cube.x -= movingSpeed
+func (i *Input) Update() {
+	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		i.keyboardstate = keyboardleft
 		i.msg = "left pressed\n"
-	} else if ebiten.IsKeyPressed(ebiten.KeyRight) && CubeCollision(cube, stone, "right") {
-		cube.x += movingSpeed
+	} else if ebiten.IsKeyPressed(ebiten.KeyRight) {
+		i.keyboardstate = keyboardright
 		i.msg = "right pressed\n"
-	} else if ebiten.IsKeyPressed(ebiten.KeyUp) && CubeCollision(cube, stone, "up") {
-		cube.y -= movingSpeed
+	} else if ebiten.IsKeyPressed(ebiten.KeyUp) {
+		i.keyboardstate = keyboardup
 		i.msg = "up pressed\n"
-	} else if ebiten.IsKeyPressed(ebiten.KeyDown) && CubeCollision(cube, stone, "down") {
-		cube.y += movingSpeed
+	} else if ebiten.IsKeyPressed(ebiten.KeyDown) {
+		i.keyboardstate = keyboarddown
 		i.msg = "down pressed\n"
 	} else {
+		i.keyboardstate = keyboardnone
 		i.msg = "none\n"
 
+	}
+}
+
+func (c *Cube) Cubemotivation(i *Input, s *Cube) {
+	dir, _ := CubeCollision(c, s)
+	switch i.keyboardstate {
+	case keyboardup:
+		if dir == "down" {
+			return
+		}
+		c.y -= movingSpeed
+	case keyboarddown:
+		if dir == "up" {
+			return
+		}
+		c.y += movingSpeed
+	case keyboardleft:
+		if dir == "right" {
+			return
+		}
+		c.x -= movingSpeed
+	case keyboardright:
+		if dir == "left" {
+			return
+		}
+		c.x += movingSpeed
 	}
 }
 
@@ -63,10 +101,10 @@ func NewCube() *Cube {
 	return cube
 }
 
-func (cube *Cube) Draw(screen *ebiten.Image) {
+func (c *Cube) Draw(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(cube.x, cube.y)
-	screen.DrawImage(cube.img, op)
+	op.GeoM.Translate(float64(c.x), float64(c.y))
+	screen.DrawImage(c.img, op)
 }
 
 func NewStone() *Cube {
@@ -83,31 +121,32 @@ func NewStone() *Cube {
 	return cube
 }
 
-func CubeCollision(cube1, cube2 *Cube, stonedir string) bool {
-	cube1x := cube1.x
-	cube1y := cube1.y
-	cube2x := cube2.x
-	cube2y := cube2.y
-	switch stonedir {
-	case "up":
-		if (cube1y-cubeHeight) > cube2y || (cube1x+cubeWidth) < cube2x || cube1x > (cube2x+stoneWidth) {
-			return true
-		}
-	case "down":
-		if cube1y < (cube2y-stoneHeight) || (cube1x+cubeWidth) < cube2x || cube1x > (cube2x+stoneWidth) {
-			return true
-		}
-	case "left":
-		if (cube1x+cubeWidth) < cube2x || cube1y < (cube2y-stoneHeight) || (cube1y-cubeHeight) > cube2y {
-			return true
-		}
-	case "right":
-		if cube1x > (cube1x-stoneWidth) || cube1y < (cube2y-stoneHeight) || (cube1y-cubeHeight) > cube2y {
-			return true
-		}
+func CubeCollision(cube1, cube2 *Cube) (dir, bool) {
+	ax := cube1.x
+	ay := cube1.y
+	aw := cubeWidth
+	ah := cubeHeight
+	bx := cube2.x
+	by := cube2.y
+	bw := stoneWidth
+	bh := stoneHeight
+	//left
+	if (ax+aw) == bx && ((by < ay && ay < (by+bh)) || (by < (ay+ah) && (ay+ah) < (by+bh))) {
+		return "left", true
 	}
-	return false
-
+	//right
+	if ax == (bx+bw) && ((by < ay && ay < (by+bh)) || (by < (ay+ah) && (ay+ah) < (by+bh))) {
+		return "right", true
+	}
+	//up
+	if (ay+ah) == by && ((bx < ax && ax < (bx+bw)) || (bx < (ax+aw) && (ax+aw) < (bx+bw))) {
+		return "up", true
+	}
+	//down
+	if ay == (by+bh) && ((bx < ax && ax < (bx+bw)) || (bx < (ax+aw) && (ax+aw) < (bx+bw))) {
+		return "down", true
+	}
+	return "none", false
 }
 
 type Game struct {
@@ -117,7 +156,8 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
-	g.input.Update(g.cube, g.stone)
+	g.input.Update()
+	g.cube.Cubemotivation(g.input, g.stone)
 	return nil
 }
 
@@ -133,9 +173,10 @@ func (g *Game) Layout(int, int) (int, int) {
 }
 
 func NewGame() *Game {
-	// 相同的代码省略...
 	return &Game{
-		input: &Input{""},
+		input: &Input{
+			0,
+			""},
 		cube:  NewCube(),
 		stone: NewStone(),
 	}
